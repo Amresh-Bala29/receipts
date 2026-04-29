@@ -239,9 +239,9 @@ export function ReplayPlayer({
   const currentOffsetMs = index.seqToOffsetMs[currentSeq] ?? 0;
   const totalDurationMs = durationMs || index.totalDurationMs;
   const currentEvent = eventBySeq.get(currentSeq);
-  const isStartPosition = currentSeq === 0;
+  const firstEditSeq = index.editSeqs[0] ?? 0;
+  const isStartPosition = currentSeq === 0 || currentSeq === firstEditSeq;
   const isCompletePosition = currentSeq === lastEditSeq && !isPlaying && lastEditSeq > 0;
-  const displayOffsetMs = isCompletePosition ? totalDurationMs : currentOffsetMs;
   const durationLabel = formatDuration(totalDurationMs);
   const displayHandle = normalizeHandle(authorHandle);
   const metadataDescription = eventDescription(currentEvent, state, {
@@ -584,7 +584,7 @@ export function ReplayPlayer({
             ))}
           </div>
           <span className="font-mono text-sm text-slate-600">
-            {formatOffset(displayOffsetMs)} / {formatOffset(totalDurationMs)}
+            {formatOffset(currentOffsetMs)} / {formatOffset(totalDurationMs)}
           </span>
         </div>
       </div>
@@ -717,7 +717,7 @@ export function ReplayPlayer({
 
       <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-600">
         <span className="font-mono text-slate-500">
-          {formatOffset(displayOffsetMs)}
+          {formatOffset(currentOffsetMs)}
         </span>
         <span className="text-slate-300">·</span>
         <span>{metadataDescription}</span>
