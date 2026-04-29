@@ -388,4 +388,10 @@ export function seedIfEmpty() {
   );
 }
 
-seedIfEmpty();
+// Skip during `next build`. Next 14 evaluates each route module in parallel
+// workers when collecting page data, which races the DELETE/INSERT seed steps
+// against the slug UNIQUE constraint. Production servers and dev mode each run
+// in a single process, so seeding stays correct there.
+if (process.env.NEXT_PHASE !== "phase-production-build") {
+  seedIfEmpty();
+}
