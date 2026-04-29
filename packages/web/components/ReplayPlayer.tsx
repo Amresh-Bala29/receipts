@@ -240,7 +240,12 @@ export function ReplayPlayer({
   const totalDurationMs = durationMs || index.totalDurationMs;
   const currentEvent = eventBySeq.get(currentSeq);
   const firstEditSeq = index.editSeqs[0] ?? 0;
-  const isStartPosition = currentSeq === 0 || currentSeq === firstEditSeq;
+  // "Start" means *before* the first edit has applied. Using <= here would
+  // collapse start and complete on receipts where firstEditSeq === lastEditSeq
+  // (e.g. a single-edit baseline-only mint), pinning the overlay open and
+  // making the slider feel broken because the user can't see the editor pane
+  // change underneath.
+  const isStartPosition = currentSeq < firstEditSeq;
   const isCompletePosition = currentSeq === lastEditSeq && !isPlaying && lastEditSeq > 0;
   const durationLabel = formatDuration(totalDurationMs);
   const displayHandle = normalizeHandle(authorHandle);
