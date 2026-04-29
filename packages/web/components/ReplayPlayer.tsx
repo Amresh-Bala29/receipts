@@ -193,7 +193,41 @@ export function ReplayPlayer({
     return map;
   }, [orderedEvents]);
   const index = useMemo(() => buildReplayIndex(orderedEvents), [orderedEvents]);
-  const lastEditSeq = index.editSeqs.at(-1) ?? 0;
+  // The editor records a baseline edit at seq 1 inserting the mount-time
+  // starter code, so later edits with absolute Monaco offsets reconstruct
+  // correctly. It's still applied in reconstructFileState, but excluded from
+  // the visible timeline — otherwise the slider's midpoint snaps to the
+  // baseline and the user sees starter code instead of their own.
+  const baselineSeq = useMemo<number | null>(() => {
+    const first = orderedEvents[0];
+    if (
+      first &&
+      first.seq === 1 &&
+      first.kind === "edit" &&
+      first.rangeStart === 0 &&
+      first.rangeEnd === 0 &&
+      first.textInserted.length > 0
+    ) {
+      return first.seq;
+    }
+    return null;
+  }, [orderedEvents]);
+  const userEditSeqs = useMemo(
+    () =>
+      baselineSeq === null
+        ? index.editSeqs
+        : index.editSeqs.filter((seq) => seq !== baselineSeq),
+    [baselineSeq, index.editSeqs],
+  );
+  // Fall back to the baseline if there are no user edits — gives the player
+  // something to render rather than an empty buffer.
+  const timelineSeqs =
+    userEditSeqs.length > 0
+      ? userEditSeqs
+      : baselineSeq !== null
+        ? [baselineSeq]
+        : [];
+  const lastEditSeq = timelineSeqs.at(-1) ?? 0;
   const [currentSeq, setCurrentSeq] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [speed, setSpeed] = useState<1 | 2 | 4>(1);
@@ -239,7 +273,7 @@ export function ReplayPlayer({
   const currentOffsetMs = index.seqToOffsetMs[currentSeq] ?? 0;
   const totalDurationMs = durationMs || index.totalDurationMs;
   const currentEvent = eventBySeq.get(currentSeq);
-  const firstEditSeq = index.editSeqs[0] ?? 0;
+  const firstEditSeq = timelineSeqs[0] ?? 0;
   // "Start" means *before* the first edit has applied. Using <= here would
   // collapse start and complete on receipts where firstEditSeq === lastEditSeq
   // (e.g. a single-edit baseline-only mint), pinning the overlay open and
@@ -279,6 +313,7 @@ export function ReplayPlayer({
     });
 
     for (const event of orderedEvents) {
+      if (event.seq === baselineSeq) continue;
       const offset = index.seqToOffsetMs[event.seq] ?? 0;
       const bucketIndex = Math.min(
         next.length - 1,
@@ -302,7 +337,13 @@ export function ReplayPlayer({
     }
 
     return next;
-  }, [index.annotations, index.seqToOffsetMs, orderedEvents, totalDurationMs]);
+  }, [
+    baselineSeq,
+    index.annotations,
+    index.seqToOffsetMs,
+    orderedEvents,
+    totalDurationMs,
+  ]);
 
   const maxEvents = Math.max(1, ...buckets.map((bucket) => bucket.eventCount));
   const flaggedBucketIndex = useMemo(() => {
@@ -423,10 +464,10 @@ export function ReplayPlayer({
   }, [currentSeq]);
 
   useEffect(() => {
-    editSeqsRef.current = index.editSeqs;
+    editSeqsRef.current = timelineSeqs;
     seqToOffsetMsRef.current = index.seqToOffsetMs;
     lastEditSeqRef.current = lastEditSeq;
-  }, [index.editSeqs, index.seqToOffsetMs, lastEditSeq]);
+  }, [index.seqToOffsetMs, lastEditSeq, timelineSeqs]);
 
   useEffect(() => {
     speedRef.current = speed;
@@ -532,11 +573,11 @@ export function ReplayPlayer({
       cancelPlaybackFrame();
       setShowFlagTooltip(false);
       setIsPlaying(false);
-      const nextSeq = snapToEdit ? nearestEditSeq(index.editSeqs, seq) : seq;
+      const nextSeq = snapToEdit ? nearestEditSeq(timelineSeqs, seq) : seq;
       latestCurrentSeqRef.current = nextSeq;
       setCurrentSeq(nextSeq);
     },
-    [cancelPlaybackFrame, index.editSeqs],
+    [cancelPlaybackFrame, timelineSeqs],
   );
 
   const handleSliderChange = (event: ChangeEvent<HTMLInputElement>) => {
