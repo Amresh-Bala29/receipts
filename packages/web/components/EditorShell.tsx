@@ -5,7 +5,7 @@ import type { editor } from "monaco-editor";
 import { Play, ReceiptText } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ProcessEvent } from "@receipts/shared";
+import { redactPasteText, type ProcessEvent } from "@receipts/shared";
 import { ConsolePanel, type ConsoleRun } from "./ConsolePanel";
 import { LiveSignalsPanel } from "./LiveSignalsPanel";
 import { useHandlePopover } from "@/components/handle/HandlePopoverContext";
@@ -220,13 +220,20 @@ export function EditorShell() {
       // an absolute Monaco offset) lands in the wrong place. STARTER_CODE is
       // the editor's mount-time content, so any pending pre-session edits
       // below replay correctly on top of this baseline.
+      //
+      // Stamp the baseline at the earliest known timestamp — either the first
+      // pending edit (which fired before this fetch resolved) or now. Using
+      // nowIso() unconditionally would put baseline.at AFTER every pending
+      // edit's at, and buildReplayIndex's `Math.max(0, at - firstAt)` would
+      // then clamp every pre-session edit to offset 0 on the timeline.
       if (!baselineRecordedRef.current) {
         baselineRecordedRef.current = true;
+        const baselineAt = pendingEditsRef.current[0]?.at ?? nowIso();
         recordEvent({
           kind: "edit",
           eventId: createId("edit"),
           sessionId: newSessionId,
-          at: nowIso(),
+          at: baselineAt,
           file: FILE_NAME,
           rangeStart: 0,
           rangeEnd: 0,
@@ -341,9 +348,9 @@ export function EditorShell() {
 
       // Pre-session keystrokes get parked in pendingEditsRef and replayed
       // once startSession() resolves. Paste classification is dropped during
-      // this window: we still record the edit (with empty textInserted if it
-      // was a paste, matching the post-session privacy contract) but don't
-      // emit a paste event since there's no session to attribute it to.
+      // this window: we still record the edit (with paste content redacted to
+      // a same-length filler matching the post-session privacy contract) but
+      // don't emit a paste event since there's no session to attribute it to.
       if (!session) {
         pendingEditsRef.current.push({
           kind: "edit",
@@ -351,7 +358,7 @@ export function EditorShell() {
           file: FILE_NAME,
           rangeStart: change.rangeOffset,
           rangeEnd: change.rangeOffset + change.rangeLength,
-          textInserted: wasPaste ? "" : change.text,
+          textInserted: wasPaste ? redactPasteText(change.text) : change.text,
           textRemoved: "",
         });
         continue;
@@ -365,7 +372,7 @@ export function EditorShell() {
         file: FILE_NAME,
         rangeStart: change.rangeOffset,
         rangeEnd: change.rangeOffset + change.rangeLength,
-        textInserted: wasPaste ? "" : change.text,
+        textInserted: wasPaste ? redactPasteText(change.text) : change.text,
         textRemoved: "",
       });
 

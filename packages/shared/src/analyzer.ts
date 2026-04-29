@@ -100,9 +100,26 @@ function computePasteSignal(
 
 function computeCadenceSignal(events: ChainedEvent[]): AnalyzerSignal {
   const windows = new Map<number, number>();
+  // The live editor records each paste as an `edit` (with the actual text
+  // redacted) immediately followed by a `paste` annotation. Cadence is meant
+  // to reflect typing rhythm only, so detect those edits by their position in
+  // the chain and exclude them.
+  const ordered = [...events].sort((left, right) => left.seq - right.seq);
+  const pasteEditSeqs = new Set<number>();
+  for (let i = 0; i < ordered.length; i += 1) {
+    const cur = ordered[i];
+    const prev = ordered[i - 1];
+    if (cur && prev && cur.kind === "paste" && prev.kind === "edit") {
+      pasteEditSeqs.add(prev.seq);
+    }
+  }
 
-  for (const event of events) {
+  for (const event of ordered) {
     if (event.kind !== "edit" || event.textInserted.length === 0) {
+      continue;
+    }
+
+    if (pasteEditSeqs.has(event.seq)) {
       continue;
     }
 
