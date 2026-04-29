@@ -318,13 +318,20 @@ export function ReplayPlayer({
     flaggedBucketIndex === null ? null : buckets[flaggedBucketIndex] ?? null;
 
   const revealRecentEdit = useCallback(
-    (seq: number, content: string) => {
+    (seq: number, content: string, file: string | null) => {
       const editorInstance = editorRef.current;
-      if (!editorInstance) return;
+      if (!editorInstance || !file) return;
 
+      // Must filter by file: rangeStart is per-file, so applying another
+      // file's offset to the displayed content reveals the wrong line.
       const recentEdit = [...orderedEvents]
         .reverse()
-        .find((event) => event.kind === "edit" && event.seq <= seq);
+        .find(
+          (event) =>
+            event.kind === "edit" &&
+            event.seq <= seq &&
+            event.file === file,
+        );
 
       if (!recentEdit || recentEdit.kind !== "edit") return;
 
@@ -380,8 +387,8 @@ export function ReplayPlayer({
     if (editorInstance.getValue() !== selectedContent) {
       editorInstance.setValue(selectedContent);
     }
-    revealRecentEdit(currentSeq, selectedContent);
-  }, [currentSeq, revealRecentEdit, selectedContent]);
+    revealRecentEdit(currentSeq, selectedContent, selectedFile);
+  }, [currentSeq, revealRecentEdit, selectedContent, selectedFile]);
 
   useEffect(() => {
     if (!editorRef.current) return;
@@ -487,6 +494,15 @@ export function ReplayPlayer({
     // Playback must not restart on every currentSeq frame update.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlaying]);
+
+  useEffect(() => {
+    return () => {
+      if (frameHoverRef.current !== null) {
+        cancelAnimationFrame(frameHoverRef.current);
+        frameHoverRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const onVisibilityChange = () => {
