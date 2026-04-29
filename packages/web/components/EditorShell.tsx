@@ -168,6 +168,17 @@ export function EditorShell() {
   const pendingPasteRef = useRef(false);
   const contentRef = useRef(STARTER_CODE);
   const charBurstsRef = useRef<{ at: number; chars: number }[]>([]);
+  // Edits that fired before sessionId resolved (cold-start race). We hold them
+  // here without a sessionId and stamp+flush them in order once the session
+  // exists, so the replay timeline never silently drops the first keystrokes.
+  const pendingEditsRef = useRef<
+    Array<Omit<Extract<ProcessEvent, { kind: "edit" }>, "sessionId" | "eventId">>
+  >([]);
+  // True once we've recorded the baseline edit that captures the starter code
+  // (or whatever the user has typed before the session resolved). Replay file
+  // reconstruction walks edits with absolute offsets onto an empty buffer, so
+  // it needs this baseline edit at seq 1 or it produces garbage.
+  const baselineRecordedRef = useRef(false);
 
   const recordEvent = useCallback((event: ProcessEvent) => {
     bufferRef.current.push(event);
@@ -200,16 +211,51 @@ export function EditorShell() {
       const response = await fetch("/api/sessions", { method: "POST" });
       const data = (await response.json()) as { session: { id: string } };
 
-      if (!cancelled) {
-        setSessionId(data.session.id);
+      if (cancelled) return;
+
+      const newSessionId = data.session.id;
+
+      // Baseline edit: insert STARTER_CODE at offset 0. Without this, replay
+      // reconstructs from an empty buffer and every later edit (which carries
+      // an absolute Monaco offset) lands in the wrong place. STARTER_CODE is
+      // the editor's mount-time content, so any pending pre-session edits
+      // below replay correctly on top of this baseline.
+      if (!baselineRecordedRef.current) {
+        baselineRecordedRef.current = true;
+        recordEvent({
+          kind: "edit",
+          eventId: createId("edit"),
+          sessionId: newSessionId,
+          at: nowIso(),
+          file: FILE_NAME,
+          rangeStart: 0,
+          rangeEnd: 0,
+          textInserted: STARTER_CODE,
+          textRemoved: "",
+        });
       }
+
+      // Drain any edits that the user typed between editor-mount and
+      // session-resolve. They were captured into pendingEditsRef without a
+      // sessionId; stamp and flush them in order so the chain stays
+      // chronological.
+      for (const pending of pendingEditsRef.current) {
+        recordEvent({
+          ...pending,
+          eventId: createId("edit"),
+          sessionId: newSessionId,
+        });
+      }
+      pendingEditsRef.current = [];
+
+      setSessionId(newSessionId);
     }
 
     void startSession();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [recordEvent]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -286,14 +332,30 @@ export function EditorShell() {
     contentRef.current = nextValue;
     setCode(nextValue);
 
-    if (!session) return;
-
     for (const change of changeEvent.changes) {
       const wasPaste = pendingPasteRef.current;
       const insertedLength = change.text.length;
       lastEditAtRef.current = Date.now();
       charBurstsRef.current.push({ at: Date.now(), chars: insertedLength });
       pendingPasteRef.current = false;
+
+      // Pre-session keystrokes get parked in pendingEditsRef and replayed
+      // once startSession() resolves. Paste classification is dropped during
+      // this window: we still record the edit (with empty textInserted if it
+      // was a paste, matching the post-session privacy contract) but don't
+      // emit a paste event since there's no session to attribute it to.
+      if (!session) {
+        pendingEditsRef.current.push({
+          kind: "edit",
+          at: nowIso(),
+          file: FILE_NAME,
+          rangeStart: change.rangeOffset,
+          rangeEnd: change.rangeOffset + change.rangeLength,
+          textInserted: wasPaste ? "" : change.text,
+          textRemoved: "",
+        });
+        continue;
+      }
 
       recordEvent({
         kind: "edit",
