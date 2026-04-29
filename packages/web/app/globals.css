@@ -1,0 +1,104 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #f8fafc;
+  color: #0f172a;
+  font-optical-sizing: auto;
+}
+
+button,
+a {
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    opacity 160ms ease;
+}
+
+@keyframes landing-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(var(--landing-offset, 12px));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes capture-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes capture-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.15);
+  }
+}
+
+.landing-animate {
+  animation: landing-fade-up 250ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.landing-section {
+  opacity: 0;
+  transform: translateY(16px);
+}
+
+.landing-section.is-visible {
+  animation: landing-fade-up 400ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.capture-card {
+  animation: capture-enter 600ms cubic-bezier(0.22, 0.61, 0.36, 1) 200ms both;
+}
+
+.capture-dot {
+  animation: capture-pulse 2.4s cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
+}
+
+.codex-badge-ping {
+  animation: capture-pulse 2.4s cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
+  }
+
+  .landing-section {
+    opacity: 1;
+    transform: none;
+  }
+
+  .codex-badge-ping {
+    animation: none !important;
+  }
+}
