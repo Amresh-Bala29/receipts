@@ -4,7 +4,7 @@
 
 Receipts is a tamper-evident record of your coding process. Not a polygraph, just the truth about your keystrokes.
 
-Live: [receipts.app](https://receipts.app) · [Sample receipt](https://receipts.app/r/demo) · [Tampered receipt](https://receipts.app/r/broken)
+Live: https://receipts-codex.vercel.app/
 
 ---
 
