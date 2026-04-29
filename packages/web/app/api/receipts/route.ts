@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { processEventBatchSchema } from "@receipts/shared";
 import { listReceipts, mintReceipt } from "@/lib/store";
 
 const mintReceiptSchema = z.object({
   sessionId: z.string().min(1),
   handle: z.string().min(1).optional(),
+  events: processEventBatchSchema.optional(),
 });
 
 export const dynamic = "force-dynamic";
@@ -29,6 +31,7 @@ export async function POST(request: Request) {
     const receipt = mintReceipt(
       parsed.data.sessionId,
       parsed.data.handle ?? "anonymous",
+      parsed.data.events,
     );
     return NextResponse.json({ receipt }, { status: 201 });
   } catch (error) {

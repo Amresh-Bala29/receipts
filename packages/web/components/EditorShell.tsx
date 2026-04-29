@@ -162,6 +162,7 @@ export function EditorShell() {
   const [isLoadingRuntime, setIsLoadingRuntime] = useState(false);
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const bufferRef = useRef<ProcessEvent[]>([]);
+  const allEventsRef = useRef<ProcessEvent[]>([]);
   const lastEditAtRef = useRef(Date.now());
   const focusedRef = useRef(false);
   const pendingPasteRef = useRef(false);
@@ -170,6 +171,7 @@ export function EditorShell() {
 
   const recordEvent = useCallback((event: ProcessEvent) => {
     bufferRef.current.push(event);
+    allEventsRef.current.push(event);
     setPendingCount(bufferRef.current.length);
     setAllEvents((events) => [...events, event]);
     setHasBufferedEvent(true);
@@ -436,10 +438,18 @@ export function EditorShell() {
     setIsMinting(true);
     await flushNow();
     const receiptHandle = handle ?? "anonymous";
+    // Send the full event list with the mint request. The server is the
+    // canonical chain builder; sending events here means mint never depends
+    // on the in-memory session store, which is invisible across serverless
+    // function instances on Vercel.
     const response = await fetch("/api/receipts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId, handle: receiptHandle }),
+      body: JSON.stringify({
+        sessionId,
+        handle: receiptHandle,
+        events: allEventsRef.current,
+      }),
     });
     const data = (await response.json()) as { receipt: { id: string } };
     router.push(`/r/${data.receipt.id}`);

@@ -92,16 +92,37 @@ export function getReceipt(slug: string) {
   };
 }
 
-export function mintReceipt(sessionId: string, handle = "anonymous"): Receipt {
+export function mintReceipt(
+  sessionId: string,
+  handle = "anonymous",
+  clientEvents?: ProcessEvent[],
+): Receipt {
   const store = getActiveStore();
   const session = store.sessions.get(sessionId);
 
-  if (!session) {
+  // Source of truth for the chain: prefer client-provided events when the
+  // mint request includes them. Serverless deployments (Vercel, Lambda) put
+  // each route in its own function instance, so the in-memory session store
+  // populated by /api/sessions and /api/events is not visible to the
+  // /api/receipts function. Re-chaining client events here keeps mint
+  // working in that topology while still letting legacy callers (and the
+  // local single-process flow) fall back to the live session.
+  let events: ChainedEvent[];
+  if (clientEvents !== undefined) {
+    events = [];
+    let prev: ChainedEvent | null = null;
+    for (const event of clientEvents) {
+      const chained = appendChainedEvent(prev, event);
+      events.push(chained);
+      prev = chained;
+    }
+  } else if (session) {
+    events = [...session.events].sort((left, right) => left.seq - right.seq);
+  } else {
     throw new Error("Session not found");
   }
 
   const normalizedHandle = handle || "anonymous";
-  const events = [...session.events].sort((left, right) => left.seq - right.seq);
   const { signals, summary } = computeAnalyzerSignals(events);
   if (summary.durationMs === 0 && events.length >= 2) {
     const first = events[0];
@@ -126,7 +147,9 @@ export function mintReceipt(sessionId: string, handle = "anonymous"): Receipt {
     languages: ["Python"],
   });
 
-  store.sessions.delete(sessionId);
+  if (session) {
+    store.sessions.delete(sessionId);
+  }
 
   return {
     id: persisted.slug,
