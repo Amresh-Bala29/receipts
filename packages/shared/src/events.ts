@@ -49,8 +49,9 @@ export const snapshotEventSchema = baseEventSchema.extend({
   contentHash: z.string().min(1),
 });
 
-// Privacy property: paste events intentionally store only length and source.
-// Receipts must never capture, transmit, or persist clipboard contents.
+// Paste events store length and source for analyzer signals; the actual
+// pasted text rides along on the accompanying edit event so the replay can
+// reconstruct what was written.
 export const processEventSchema = z.discriminatedUnion("kind", [
   editEventSchema,
   pasteEventSchema,
@@ -63,27 +64,3 @@ export const processEventSchema = z.discriminatedUnion("kind", [
 export const processEventBatchSchema = z.array(processEventSchema);
 
 export type ProcessEvent = z.infer<typeof processEventSchema>;
-
-// Visible filler used in `textInserted` for paste-origin edits. The actual
-// pasted characters are forbidden by the privacy contract (receipts are
-// public), but storing nothing breaks replay reconstruction: the edit's
-// rangeStart/rangeEnd are still applied, so a paste over a selection wipes
-// content and a paste outside selection desyncs every later edit's offsets.
-// A same-length filler keeps reconstruction faithful while leaking nothing
-// beyond the length already published in the paste event.
-export const PASTE_REDACTION_CHAR = "█"; // FULL BLOCK
-
-export function redactPasteText(text: string): string {
-  // Preserve newlines so replay shows the paste's line structure (and so
-  // line-number descriptions for later edits stay correct). Everything else
-  // becomes the redaction block.
-  return text.replace(/[^\n]/g, PASTE_REDACTION_CHAR);
-}
-
-export function isRedactedPasteText(text: string): boolean {
-  if (text.length === 0) return false;
-  for (const ch of text) {
-    if (ch !== PASTE_REDACTION_CHAR && ch !== "\n") return false;
-  }
-  return true;
-}

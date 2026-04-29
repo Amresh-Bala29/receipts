@@ -5,7 +5,7 @@ import type { editor } from "monaco-editor";
 import { Play, ReceiptText } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { redactPasteText, type ProcessEvent } from "@receipts/shared";
+import type { ProcessEvent } from "@receipts/shared";
 import { ConsolePanel, type ConsoleRun } from "./ConsolePanel";
 import { LiveSignalsPanel } from "./LiveSignalsPanel";
 import { useHandlePopover } from "@/components/handle/HandlePopoverContext";
@@ -348,9 +348,8 @@ export function EditorShell() {
 
       // Pre-session keystrokes get parked in pendingEditsRef and replayed
       // once startSession() resolves. Paste classification is dropped during
-      // this window: we still record the edit (with paste content redacted to
-      // a same-length filler matching the post-session privacy contract) but
-      // don't emit a paste event since there's no session to attribute it to.
+      // this window: we still record the edit but don't emit a paste event
+      // since there's no session to attribute it to.
       if (!session) {
         pendingEditsRef.current.push({
           kind: "edit",
@@ -358,7 +357,7 @@ export function EditorShell() {
           file: FILE_NAME,
           rangeStart: change.rangeOffset,
           rangeEnd: change.rangeOffset + change.rangeLength,
-          textInserted: wasPaste ? redactPasteText(change.text) : change.text,
+          textInserted: change.text,
           textRemoved: "",
         });
         continue;
@@ -372,7 +371,7 @@ export function EditorShell() {
         file: FILE_NAME,
         rangeStart: change.rangeOffset,
         rangeEnd: change.rangeOffset + change.rangeLength,
-        textInserted: wasPaste ? redactPasteText(change.text) : change.text,
+        textInserted: change.text,
         textRemoved: "",
       });
 
